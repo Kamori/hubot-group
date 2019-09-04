@@ -47,6 +47,7 @@ module.exports = (robot) ->
   robot.brain.on "loaded", (res) ->
     console.log "groups on load", group.dump()
 
+  # When someone @groupname 
   robot.hear ///@#{IDENTIFIER}///, (res) ->
     # actual matching done in group.tag
     if res.envelope.user.name != robot.name
@@ -54,6 +55,15 @@ module.exports = (robot) ->
       # console.log "group heard", response, res.envelope.user.name
       if response.length > 0
         res.send response.join config('separator', '\n')
+
+  # When someone/bot !missedescalations <group>
+  robot.hear ///.*\!missedescalations\s+(#{IDENTIFIER})///, (res) ->
+      g = res.match[1]
+      escalations = group.escalations g
+      res.message.thread_ts = res.message.id
+      for escalation in escalations
+          res.send escalation
+      group.drop_escalations g
 
   robot.respond ///group\s+list///, (res) ->
     res.send "Groups: #{group.groups().join ", "}"
@@ -112,6 +122,12 @@ module.exports = (robot) ->
       return
     if group.add g, user
       res.send "#{user} punched in to #{g}!"
+      if group.has_missed_escalations g
+        escalations = group.escalations g
+        num_of_esc = escalations.length
+        res.send "#{user} there is #{num_of_esc} escalations waiting from off-hours.\n!missedescalations #{g}"
+      else
+        res.send "Good Morning"     
     else
       res.send "#{user} is already in group #{g}!"
 

@@ -2,6 +2,7 @@
 class Group
   constructor: (@robot, @config) ->
     @cache = {}
+    @missed_escalations = {}
 
     @robot.brain.on "loaded", @load
     if @robot.brain.data.users.length
@@ -15,7 +16,24 @@ class Group
       @cache = @robot.brain.data.group
     else
       @robot.brain.data.group = @cache
+    if @robot.brain.data.missed_escalations
+      @missed_escalations = @robot.brain.data.missed_escalations
+    else
+      @robot.brain.data.missed_escalations = @missed_escalations
 
+  has_missed_escalations: (group) =>
+    if @missed_escalations[group].length > 0
+        return true
+    else
+        return false
+
+  escalations: (group) =>
+      return @missed_escalations[group]
+      
+  drop_escalations: (group) =>
+    @missed_escalations[group] = []
+    return false
+  
   members: (group) =>
     @sorted(@cache[group] or [])
 
@@ -30,12 +48,14 @@ class Group
       return false
     else
       @cache[group] = []
+      @missed_escalations[group] = []
       return true
 
   destroy: (group) =>
     if @exists group
       mem = @members group
       delete @cache[group]
+      delete @missed_escalations[group]
       return mem
     else
       return null
@@ -45,7 +65,9 @@ class Group
       return false
     else
       @cache[to] = @cache[from]
+      @missed_escalations[to] = @missed_escalations[from]
       delete @cache[from]
+      delete @missed_escalations[from]
       return true
 
   add: (group, name) =>
@@ -146,6 +168,14 @@ class Group
         r = "*@#{g}*: #{(decorateOnce name for name in mem).join ", "}"
         # console.log "r", r
         response.push r
+      else if mem.length == 0
+        if res.message.thread_ts?
+          p_id = res.message.thread_ts.replace /\./g, ""
+          @missed_escalations[g].push "https://lw.slack.com/archives/#{res.envelope.room}/p#{p_id}"
+        else
+          p_id = res.envelope.message.id.replace /\./g, ""
+          @missed_escalations[g].push "https://lw.slack.com/archives/#{res.envelope.room}/p#{p_id}"
+        
     if response.length > 0 and res.message.user.name
       prepend = []
       
